@@ -1,5 +1,5 @@
 {
-  "watch_folder": "/Users/jerryx/Pictures",
+  "watch_folder": "~/Pictures",
   "dry_run": true,
   "default_copies": 1,
   "mode": "gui"

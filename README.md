@@ -27,9 +27,9 @@ Check out [`howtouse.mov`](howtouse.mov) for a quick walkthrough showing live ca
 
 ## 🚀 How to Run
 
-Navigate to the directory:
+Navigate to the project directory:
 ```bash
-cd "/Volumes/Jerry_SSD 1/Work/ie/PhotoBoothAutomation"
+cd PhotoBoothAutomation
 ```
 
 ### 1. Interactive Test Mode (Simulate 3 Camera Shots)
@@ -44,8 +44,10 @@ python3 interactive_test.py
 ### 2. Live Photo Booth Station (Normal Usage)
 ```bash
 ./run.sh
+# or specify a custom folder:
+python3 photobooth.py --folder "<image source>"
 ```
-- Listens to your Sony Imaging Edge save folder.
+- Listens to your Sony Imaging Edge save folder (`<image source>`, defaults to `~/Pictures`).
 - When photos arrive, they immediately show up side-by-side.
 - Click **"🖨️ Print Selected Photos"** (or press `Enter`) to print.
 - Click **"✅ Next Group / Clear Feed"** (or press `c`) when that group is done to reset the feed for the next guest.
