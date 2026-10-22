@@ -98,7 +98,7 @@ def main():
         return
 
     # Update config
-    cfg["watch_folder"] = os.path.abspath(args.folder)
+    cfg["watch_folder"] = args.folder if args.folder.startswith("~") else os.path.abspath(args.folder)
     cfg["mode"] = args.mode
     cfg["dry_run"] = args.dry_run
     save_config(cfg)

@@ -287,7 +287,7 @@ class PhotoCard(tk.Frame):
     - '🔍 Preview' button (and double-click on image) opens Google Drive-style full-window Lightbox.
     """
     def __init__(self, parent, photo_path, shot_index, on_toggle_select, on_print_single, on_open_preview,
-                 canvas_height=315, **kwargs):
+                 canvas_height=315, get_frame=None, **kwargs):
         super().__init__(
             parent, bg=PALETTE["card_selected_bg"], highlightthickness=3,
             highlightbackground=PALETTE["accent_blue"], bd=0, **kwargs
@@ -298,6 +298,8 @@ class PhotoCard(tk.Frame):
         self.on_print_single = on_print_single
         self.on_open_preview = on_open_preview
         self.canvas_height = canvas_height
+        self.get_frame = get_frame or (lambda: None)
+        self.use_frame = True
 
         self.selected = True
         self.copies = 1
@@ -313,39 +315,30 @@ class PhotoCard(tk.Frame):
         self.update_selection_visual()
 
     def _build_card(self):
-        # 1. Header Row (Shot Number Pill + Filename + 🔍 Preview Pill + ✓ SELECTED Pill)
+        # 1. Header Row (Shot Number Badge + Filename on Left, Selection Badge on Right)
         self.header = tk.Frame(self, bg=PALETTE["card_selected_bg"], cursor="pointinghand")
-        self.header.pack(fill=tk.X, padx=12, pady=(10, 6))
+        self.header.pack(fill=tk.X, padx=12, pady=(10, 4))
 
         self.lbl_badge = tk.Label(
-            self.header, text=f"📸 Shot #{self.shot_index}", font=font_bold(15),
-            bg=PALETTE["accent_blue"], fg="#ffffff", padx=10, pady=4, cursor="pointinghand"
+            self.header, text=f"📸 Shot #{self.shot_index}", font=font_bold(13),
+            bg=PALETTE["accent_blue"], fg="#ffffff", padx=8, pady=3, cursor="pointinghand"
         )
         self.lbl_badge.pack(side=tk.LEFT)
 
         fname = os.path.basename(self.photo_path)
-        if len(fname) > 15:
-            fname = fname[:7] + "…" + fname[-6:]
+        if len(fname) > 13:
+            fname = fname[:6] + "…" + fname[-5:]
         self.lbl_name = tk.Label(
-            self.header, text=f" {fname}", font=font_bold(13),
+            self.header, text=f" {fname}", font=font_bold(12),
             bg=PALETTE["card_selected_bg"], fg=PALETTE["text_secondary"], cursor="pointinghand"
         )
         self.lbl_name.pack(side=tk.LEFT, padx=4)
 
         self.lbl_select_badge = tk.Label(
-            self.header, text="✓ SELECTED", font=font_bold(13),
-            bg=PALETTE["accent_green"], fg="#ffffff", padx=10, pady=4, cursor="pointinghand"
+            self.header, text="✓ SELECTED", font=font_bold(12),
+            bg=PALETTE["accent_green"], fg="#ffffff", padx=8, pady=3, cursor="pointinghand"
         )
         self.lbl_select_badge.pack(side=tk.RIGHT)
-
-        # Google Drive-style Quick Preview Button right in the card header!
-        self.btn_preview = RoundedButton(
-            self.header, text="🔍 Preview", command=lambda: self.on_open_preview(self),
-            height=32, radius=10, pad_x=11, font_size=13,
-            bg_hex=PALETTE["accent_purple"], hover_hex=PALETTE["accent_purple_hover"],
-            active_hex=PALETTE["accent_purple_active"], container_bg=PALETTE["card_selected_bg"]
-        )
-        self.btn_preview.pack(side=tk.RIGHT, padx=(4, 8))
 
         for widget in (self, self.header, self.lbl_badge, self.lbl_name, self.lbl_select_badge):
             widget.bind("<Button-1>", lambda e: self.toggle_selection())
@@ -360,9 +353,37 @@ class PhotoCard(tk.Frame):
         self.canvas.bind("<Double-Button-1>", self._on_canvas_double_click)
         self.canvas.bind("<Configure>", lambda e: self._render_thumbnail())
 
-        # 3. Bottom Controls Row (Copies Stepper + Rotate + Direct Print)
+        # 3. Photo Tools Row (Preview Lightbox + Frame Overlay Toggle + Rotate)
+        self.tools_frame = tk.Frame(self, bg=PALETTE["card_selected_bg"])
+        self.tools_frame.pack(fill=tk.X, padx=12, pady=(6, 4))
+
+        self.btn_preview = RoundedButton(
+            self.tools_frame, text="🔍 Preview", command=lambda: self.on_open_preview(self),
+            height=32, radius=10, pad_x=8, font_size=12,
+            bg_hex=PALETTE["accent_purple"], hover_hex=PALETTE["accent_purple_hover"],
+            active_hex=PALETTE["accent_purple_active"], container_bg=PALETTE["card_selected_bg"]
+        )
+        self.btn_preview.pack(side=tk.LEFT, padx=(0, 4))
+
+        self.btn_frame_toggle = RoundedButton(
+            self.tools_frame, text="🖼️ Frame: ON", command=self.toggle_frame,
+            height=32, radius=10, pad_x=8, font_size=12,
+            bg_hex=PALETTE["accent_purple"], hover_hex=PALETTE["accent_purple_hover"],
+            active_hex=PALETTE["accent_purple_active"], container_bg=PALETTE["card_selected_bg"]
+        )
+        self.btn_frame_toggle.pack(side=tk.LEFT, padx=4)
+
+        self.btn_rot = RoundedButton(
+            self.tools_frame, text="🔄 Rotate", command=self.rotate_photo,
+            height=32, radius=10, pad_x=8, font_size=12,
+            bg_hex=PALETTE["accent_charcoal"], hover_hex=PALETTE["accent_charcoal_hover"],
+            active_hex=PALETTE["accent_charcoal_active"], container_bg=PALETTE["card_selected_bg"]
+        )
+        self.btn_rot.pack(side=tk.RIGHT)
+
+        # 4. Print & Quantity Controls Row (Copies Stepper on Left + Direct Print on Right)
         self.controls = tk.Frame(self, bg=PALETTE["card_selected_bg"])
-        self.controls.pack(fill=tk.X, padx=12, pady=(6, 12))
+        self.controls.pack(fill=tk.X, padx=12, pady=(4, 10))
 
         self.stepper_frame = tk.Frame(
             self.controls, bg=PALETTE["surface_elevated"],
@@ -372,42 +393,33 @@ class PhotoCard(tk.Frame):
 
         self.btn_minus = RoundedButton(
             self.stepper_frame, text="−", command=self.decrement_copies,
-            height=38, radius=10, pad_x=12, min_width=38,
+            height=34, radius=9, pad_x=6, min_width=32,
             bg_hex=PALETTE["accent_charcoal"], hover_hex=PALETTE["accent_charcoal_hover"],
-            active_hex=PALETTE["accent_charcoal_active"], font_size=20,
+            active_hex=PALETTE["accent_charcoal_active"], font_size=18,
             container_bg=PALETTE["surface_elevated"]
         )
-        self.btn_minus.pack(side=tk.LEFT, padx=3, pady=3)
+        self.btn_minus.pack(side=tk.LEFT, padx=2, pady=2)
 
         self.lbl_copies_num = tk.Label(
-            self.stepper_frame, text="1 Copy", font=font_bold(15), width=7,
+            self.stepper_frame, text="1 Copy", font=font_bold(13), width=7,
             bg=PALETTE["surface_elevated"], fg="#ffffff", padx=2
         )
         self.lbl_copies_num.pack(side=tk.LEFT)
 
         self.btn_plus = RoundedButton(
             self.stepper_frame, text="+", command=self.increment_copies,
-            height=38, radius=10, pad_x=12, min_width=38,
+            height=34, radius=9, pad_x=6, min_width=32,
             bg_hex=PALETTE["accent_charcoal"], hover_hex=PALETTE["accent_charcoal_hover"],
-            active_hex=PALETTE["accent_charcoal_active"], font_size=20,
+            active_hex=PALETTE["accent_charcoal_active"], font_size=18,
             container_bg=PALETTE["surface_elevated"]
         )
-        self.btn_plus.pack(side=tk.LEFT, padx=3, pady=3)
-
-        self.btn_rot = RoundedButton(
-            self.controls, text="🔄 Rotate", command=self.rotate_photo,
-            height=42, radius=12, pad_x=13,
-            bg_hex=PALETTE["accent_charcoal"], hover_hex=PALETTE["accent_charcoal_hover"],
-            active_hex=PALETTE["accent_charcoal_active"], font_size=15,
-            container_bg=PALETTE["card_selected_bg"]
-        )
-        self.btn_rot.pack(side=tk.LEFT, padx=8)
+        self.btn_plus.pack(side=tk.LEFT, padx=2, pady=2)
 
         self.btn_print_this = RoundedButton(
             self.controls, text="🖨️ Print 1x", command=lambda: self.on_print_single(self),
-            height=42, radius=12, pad_x=14,
+            height=36, radius=10, pad_x=12,
             bg_hex=PALETTE["accent_blue"], hover_hex=PALETTE["accent_blue_hover"],
-            active_hex=PALETTE["accent_blue_active"], font_size=15,
+            active_hex=PALETTE["accent_blue_active"], font_size=13,
             container_bg=PALETTE["card_selected_bg"]
         )
         self.btn_print_this.pack(side=tk.RIGHT)
@@ -470,12 +482,20 @@ class PhotoCard(tk.Frame):
         if self.rotation % 360 != 0:
             img = img.rotate(-self.rotation, expand=True)
 
+        # Show exactly what will print: overlay the frame when one is chosen and enabled for this photo
+        frame = self.get_frame() if self.use_frame else None
+        if frame is not None:
+            composed_key = (self.rotation % 360, id(frame))
+            if getattr(self, "_composed", (None,))[0] != composed_key:
+                self._composed = (composed_key, printer_service.compose_with_frame(img, frame))
+            img = self._composed[1]
+
         w, h = img.size
         scale = min((c_w - 6) / w, (c_h - 6) / h)
         disp_w = max(1, int(w * scale))
         disp_h = max(1, int(h * scale))
 
-        cache_key = (disp_w, disp_h, self.rotation % 360, self.selected)
+        cache_key = (disp_w, disp_h, self.rotation % 360, self.selected, id(frame) if frame is not None else None)
         if cache_key in self._thumb_cache:
             self.tk_thumb = self._thumb_cache[cache_key]
         else:
@@ -493,10 +513,25 @@ class PhotoCard(tk.Frame):
         self.rotation = (self.rotation + 90) % 360
         self._render_thumbnail()
 
+    def toggle_frame(self):
+        self.use_frame = not self.use_frame
+        if self.use_frame:
+            self.btn_frame_toggle.set_colors(
+                PALETTE["accent_purple"], PALETTE["accent_purple_hover"], PALETTE["accent_purple_active"]
+            )
+            self.btn_frame_toggle.set_text("🖼️ Frame: ON", resize_if_needed=True)
+        else:
+            self.btn_frame_toggle.set_colors(
+                PALETTE["accent_charcoal"], PALETTE["accent_charcoal_hover"], PALETTE["accent_charcoal_active"],
+                fg_hex=PALETTE["text_secondary"]
+            )
+            self.btn_frame_toggle.set_text("🖼️ Frame: OFF", resize_if_needed=True)
+        self._render_thumbnail()
+
     def _sync_copy_labels(self):
         unit = "Copy" if self.copies == 1 else "Copies"
         self.lbl_copies_num.config(text=f"{self.copies} {unit}")
-        self.btn_print_this.set_text(f"🖨️ Print {self.copies}x")
+        self.btn_print_this.set_text(f"🖨️ Print {self.copies}x", resize_if_needed=True)
 
     def increment_copies(self):
         if self.copies < 10:
@@ -524,8 +559,9 @@ class PhotoCard(tk.Frame):
         self.configure(bg=card_bg)
         self.header.configure(bg=card_bg)
         self.lbl_name.configure(bg=card_bg)
+        self.tools_frame.configure(bg=card_bg)
         self.controls.configure(bg=card_bg)
-        for btn in (self.btn_preview, self.btn_rot, self.btn_print_this):
+        for btn in (self.btn_preview, self.btn_frame_toggle, self.btn_rot, self.btn_print_this):
             btn.container_bg = card_bg
             btn._rebuild_surfaces()
 
@@ -540,6 +576,7 @@ class PhotoCard(tk.Frame):
             self.lbl_select_badge.configure(text="✕ SKIPPED", bg=PALETTE["accent_charcoal"], fg=PALETTE["text_secondary"])
             self.btn_print_this.set_enabled(False)
         self.btn_preview.configure(image=self.btn_preview.normal_photo)
+        self.btn_frame_toggle.configure(image=self.btn_frame_toggle.normal_photo)
         self.btn_rot.configure(image=self.btn_rot.normal_photo)
 
 
@@ -551,7 +588,7 @@ class PhotoBoothApp:
         self.root.minsize(1100, 760)
         self.root.configure(bg=PALETTE["window_bg"])
 
-        self.watch_folder = os.path.abspath(watch_folder) if watch_folder else os.path.expanduser("~/Pictures")
+        self.watch_folder = os.path.abspath(os.path.expanduser(watch_folder)) if watch_folder else os.path.expanduser("~/Pictures")
         self.dry_run = tk.BooleanVar(value=dry_run)
 
         self.active_cards = []
@@ -568,6 +605,10 @@ class PhotoBoothApp:
         self.lightbox_pan_y = 0.0
         self._drag_start = None
         self.lightbox_tk_img = None
+
+        # Photo frame overlay (transparent PNG), chosen via the top bar
+        self.frame_path = None
+        self.frame_img = None
 
         self._build_top_bar()
         self._build_bottom_bar()
@@ -625,6 +666,15 @@ class PhotoBoothApp:
             fg=PALETTE["text_secondary"], bg=PALETTE["surface_bg"]
         )
         self.lbl_folder.pack(side=tk.LEFT, padx=(4, 12))
+
+        # Photo frame picker (transparent PNG overlaid on prints)
+        self.btn_frame = RoundedButton(
+            top_bar, text="🖼️ Frame: None", command=self.select_frame,
+            height=40, radius=11, pad_x=14, font_size=15,
+            bg_hex=PALETTE["accent_charcoal"], hover_hex=PALETTE["accent_charcoal_hover"],
+            active_hex=PALETTE["accent_charcoal_active"], container_bg=PALETTE["surface_bg"]
+        )
+        self.btn_frame.pack(side=tk.LEFT, padx=(0, 12))
 
         # Center-Left: Grid Zoom Stepper ([ − ] 🔍 100% (3/row) [ + ])
         zoom_frame = tk.Frame(
@@ -835,6 +885,14 @@ class PhotoBoothApp:
         )
         self.btn_lb_select.pack(side=tk.LEFT, padx=6)
 
+        self.btn_lb_frame = RoundedButton(
+            lb_top_inner, text="🖼️ Frame: ON", command=self._lightbox_toggle_frame,
+            height=40, radius=11, pad_x=16, font_size=14,
+            bg_hex=PALETTE["accent_purple"], hover_hex=PALETTE["accent_purple_hover"],
+            active_hex=PALETTE["accent_purple_active"], container_bg=PALETTE["lightbox_bar"]
+        )
+        self.btn_lb_frame.pack(side=tk.LEFT, padx=6)
+
         # Close Lightbox Button (Right)
         self.btn_lb_close = RoundedButton(
             lb_top_inner, text="✕ Close Preview [Esc]", command=self.close_lightbox,
@@ -1008,8 +1066,29 @@ class PhotoBoothApp:
         self.lbl_lb_copies.config(text=f"{card.copies} {unit}")
         self.btn_lb_print.set_text(f"🖨️ Print This ({card.copies}x)", resize_if_needed=True)
 
+        if self.frame_img is not None:
+            self.btn_lb_frame.pack(side=tk.LEFT, padx=6)
+            if card.use_frame:
+                self.btn_lb_frame.set_colors(
+                    PALETTE["accent_purple"], PALETTE["accent_purple_hover"], PALETTE["accent_purple_active"]
+                )
+                self.btn_lb_frame.set_text("🖼️ Frame: ON", resize_if_needed=True)
+            else:
+                self.btn_lb_frame.set_colors(
+                    PALETTE["accent_charcoal"], PALETTE["accent_charcoal_hover"], PALETTE["accent_charcoal_active"]
+                )
+                self.btn_lb_frame.set_text("🖼️ Frame: OFF", resize_if_needed=True)
+        else:
+            self.btn_lb_frame.pack_forget()
+
         z_pct = int(round(self.lightbox_zoom * 100))
         self.lbl_lb_zoom.config(text=f"🔍 Fit (100%)" if z_pct == 100 else f"🔍 {z_pct}%")
+
+    def _lightbox_toggle_frame(self):
+        if self.lightbox_card:
+            self.lightbox_card.toggle_frame()
+            self._sync_lightbox_ui()
+            self._render_lightbox_image()
 
     def _render_lightbox_image(self):
         card = self.lightbox_card
@@ -1023,6 +1102,10 @@ class PhotoBoothApp:
         img = card.pil_img
         if card.rotation % 360 != 0:
             img = img.rotate(-card.rotation, expand=True)
+
+        # Show frame overlay in full-screen Lightbox if active for this photo
+        if card.use_frame and self.frame_img is not None:
+            img = printer_service.compose_with_frame(img, self.frame_img)
 
         w, h = img.size
         base_scale = min((c_w - 40) / w, (c_h - 30) / h)
@@ -1297,6 +1380,53 @@ class PhotoBoothApp:
 
         threading.Thread(target=check, daemon=True).start()
 
+    def select_frame(self):
+        if self.frame_path:
+            ans = messagebox.askyesnocancel(
+                "Photo Frame",
+                f"Currently active frame:\n{os.path.basename(self.frame_path)}\n\n• Click 'Yes' to choose a new frame PNG\n• Click 'No' to remove/clear the frame\n• Click 'Cancel' to keep current"
+            )
+            if ans is False:  # Remove frame
+                self.frame_path = None
+                self.frame_img = None
+                self.btn_frame.set_text("🖼️ Frame: None", resize_if_needed=True)
+                self.lbl_status.config(text="🖼️ Frame removed. Photos will print without overlay.")
+                for card in self.active_cards:
+                    card._render_thumbnail()
+                if self.lightbox_card is not None:
+                    self._sync_lightbox_ui()
+                    self._render_lightbox_image()
+                return
+            elif ans is None:
+                return
+
+        path = filedialog.askopenfilename(
+            title="Select Photo Frame (transparent PNG)", filetypes=[("PNG image", "*.png")]
+        )
+        if not path:
+            return
+        try:
+            with Image.open(path) as f:
+                self.frame_img = f.convert("RGBA")
+        except Exception as e:
+            messagebox.showerror("Invalid Frame", f"Could not open frame:\n\n{e}")
+            return
+        self.frame_path = path
+        name = os.path.basename(path)
+        if len(name) > 18:
+            name = name[:15] + "…"
+        self.btn_frame.set_text(f"🖼️ Frame: {name}", resize_if_needed=True)
+        w, h = self.frame_img.size
+        self.lbl_status.config(text=f"🖼️ Frame loaded: {os.path.basename(path)} ({w}×{h} px)")
+        for card in self.active_cards:
+            card._render_thumbnail()
+        if self.lightbox_card is not None:
+            self._sync_lightbox_ui()
+            self._render_lightbox_image()
+
+    def _frame_for(self, card):
+        return self.frame_path if card.use_frame else None
+
     def select_folder(self):
         folder = filedialog.askdirectory(initialdir=self.watch_folder, title="Select Sony Imaging Edge Save Folder")
         if folder:
@@ -1327,7 +1457,8 @@ class PhotoBoothApp:
             on_toggle_select=self._update_summary,
             on_print_single=self._print_single_card,
             on_open_preview=self.open_lightbox,
-            canvas_height=c_height
+            canvas_height=c_height,
+            get_frame=lambda: self.frame_img
         )
         self.active_cards.append(card)
         self._rearrange_cards_grid(scroll_to_bottom=True)
@@ -1409,13 +1540,14 @@ class PhotoBoothApp:
         dry = self.dry_run.get()
         copies = card.copies
         rot = card.rotation
+        frame = self._frame_for(card)
 
         self.lbl_status.config(text=f"⏳ Spooling {copies}x {fname} to Canon SELPHY CP1500...")
         self.root.update_idletasks()
 
         def worker():
             success, msg = printer_service.print_photo(
-                card.photo_path, copies=copies, dry_run=dry, rotation=rot
+                card.photo_path, copies=copies, dry_run=dry, rotation=rot, frame_path=frame
             )
             self.root.after(0, lambda: self._on_print_finished(success, msg, fname, copies, dry))
 
@@ -1439,7 +1571,8 @@ class PhotoBoothApp:
             for card in selected_cards:
                 fname = os.path.basename(card.photo_path)
                 success, msg = printer_service.print_photo(
-                    card.photo_path, copies=card.copies, dry_run=dry, rotation=card.rotation
+                    card.photo_path, copies=card.copies, dry_run=dry, rotation=card.rotation,
+                    frame_path=self._frame_for(card)
                 )
                 results.append((success, fname, card.copies, msg))
 

@@ -80,9 +80,26 @@ def clear_print_queue(printer_name=PRINTER_NAME):
         return False, str(e)
 
 
-def prepare_lossless_rotated_image(image_path, output_dir=None, rotation=0):
+def compose_with_frame(photo, frame):
     """
-    If rotation is needed, prepares a 100% LOSSLESS temporary PNG print file.
+    Center-crops the photo (at native resolution) to the frame's aspect ratio,
+    then overlays the transparent PNG frame on top. The frame is resized to the photo, not vice versa.
+    """
+    fw, fh = frame.size
+    pw, ph = photo.size
+    if pw / ph > fw / fh:
+        cw, ch = round(ph * fw / fh), ph
+    else:
+        cw, ch = pw, round(pw * fh / fw)
+    left, top = (pw - cw) // 2, (ph - ch) // 2
+    canvas = photo.crop((left, top, left + cw, top + ch)).convert("RGBA")
+    overlay = frame.convert("RGBA").resize((cw, ch), Image.Resampling.LANCZOS)
+    return Image.alpha_composite(canvas, overlay).convert("RGB")
+
+
+def prepare_lossless_rotated_image(image_path, output_dir=None, rotation=0, frame_path=None):
+    """
+    If rotation or a frame is needed, prepares a 100% LOSSLESS temporary PNG print file.
     Does NOT use lossy JPEG re-compression. Preserves exact pixel data.
     """
     with Image.open(image_path) as img:
@@ -94,6 +111,10 @@ def prepare_lossless_rotated_image(image_path, output_dir=None, rotation=0):
 
         if rotation != 0:
             img = img.rotate(-rotation, expand=True)
+
+        if frame_path:
+            with Image.open(frame_path) as frame:
+                img = compose_with_frame(img, frame)
 
         if output_dir is None:
             output_dir = os.path.dirname(image_path)
@@ -107,7 +128,7 @@ def prepare_lossless_rotated_image(image_path, output_dir=None, rotation=0):
         return out_path
 
 
-def print_photo(image_path, copies=1, printer_name=PRINTER_NAME, dry_run=False, rotation=0):
+def print_photo(image_path, copies=1, printer_name=PRINTER_NAME, dry_run=False, rotation=0, frame_path=None):
     """
     Sends photo to Canon SELPHY CP1500 using CUPS 'lp'.
     
@@ -126,12 +147,15 @@ def print_photo(image_path, copies=1, printer_name=PRINTER_NAME, dry_run=False, 
         return False, f"File not found: {image_path}"
 
     temp_file = None
-    if rotation % 360 != 0:
-        # Generate lossless PNG for rotation
+    if rotation % 360 != 0 or frame_path:
+        # Generate lossless PNG for rotation and/or frame overlay
         try:
-            temp_file = prepare_lossless_rotated_image(image_path, rotation=rotation)
+            temp_file = prepare_lossless_rotated_image(image_path, rotation=rotation, frame_path=frame_path)
             target_print_file = temp_file
-        except Exception:
+        except Exception as e:
+            if frame_path:
+                # Never silently print an unframed photo when a frame was requested
+                return False, f"Could not apply frame: {e}"
             target_print_file = image_path
     else:
         # Print original file directly (100% pristine, zero intermediate re-encoding)
