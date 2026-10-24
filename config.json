@@ -2,5 +2,6 @@
   "watch_folder": "~/Pictures",
   "dry_run": true,
   "default_copies": 1,
-  "mode": "gui"
+  "mode": "gui",
+  "frames_folder": "sample_frames"
 }
