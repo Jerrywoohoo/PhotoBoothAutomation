@@ -19,11 +19,9 @@ chmod +x run.sh
 xattr -cr .
 ```
 
-### 3. Install Dependencies (`Pillow` & `pyftpdlib`)
+### 3. Install Dependency (`Pillow`)
 ```bash
-pip3 install -r requirements.txt
-# or directly:
-pip3 install Pillow pyftpdlib
+pip3 install Pillow
 ```
 
 ### 4. Run the App
