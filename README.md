@@ -6,31 +6,20 @@ Automated, lossless, borderless photo printing workflow with multi-template `.pn
 
 ## 🚀 How to Use (Quick Start)
 
-### 1. Clone the Repository & Enter the Folder
-```bash
-git clone https://github.com/Jerrywoohoo/PhotoBoothAutomation.git
-cd PhotoBoothAutomation
-```
+### Option 1: 🌟 One-Click Launcher (Easiest - Zero Terminal or Python Setup!)
+1. Download or clone this folder.
+2. **Double-click `run.command`** in Finder!
+   - On the very first launch, it automatically sets up an isolated environment and installs `Pillow`.
+   - On future launches, it boots immediately in 1 second.
+   *(Note: If macOS displays an unidentified developer warning on first click, simply Right-Click `run.command` → select **Open**).*
 
-### 2. Grant Script Execution Permissions (macOS)
-On macOS, newly cloned or downloaded repositories may block shell scripts with `Permission denied` or Gatekeeper quarantine flags. Run this once inside the folder to allow running the scripts:
-```bash
-chmod +x run.sh
-xattr -cr .
-```
+---
 
-### 3. Install Dependency (`Pillow`)
-```bash
-pip3 install Pillow
-```
-
-### 4. Run the App
-
-#### Option A: Live Photo Booth Station (or Toggle Test Mode in UI)
+### Option 2: Run via Terminal
 ```bash
 ./run.sh
-# Or run directly with Python and specify a custom camera folder:
-python3 photobooth.py --folder "<image source>"
+# Or run directly with Python:
+python3 photobooth.py --folder "~/Pictures"
 ```
 - Monitors your Sony Imaging Edge save folder (`<image source>`, defaults to `~/Pictures`).
 - Incoming camera photos appear side-by-side automatically.
